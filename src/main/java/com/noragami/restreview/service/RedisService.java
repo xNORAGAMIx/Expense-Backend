@@ -25,4 +25,17 @@ public class RedisService {
 
         return count != null && count > 1;
     }
+
+    public void saveOtp(String key, String otp, long expirationInSeconds) {
+        redisTemplate.opsForValue().set("otp:" + key, otp, Duration.ofSeconds(expirationInSeconds));
+    }
+
+    public String getOtp(String key) {
+        return redisTemplate.opsForValue().get("otp:" + key);
+    }
+
+    public void deleteOtp(String key) {
+        redisTemplate.delete("otp:" + key);
+    }
+
 }

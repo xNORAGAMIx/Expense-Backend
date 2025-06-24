@@ -99,10 +99,14 @@ public class AuthController {
         }
     }
 
-    // Send otp to logged in user for email verification
+    // Send otp to logged in user for email verification - working
     @PostMapping("/send-otp")
     public void sendVerifyOTP (@CurrentSecurityContext(expression = "authentication?.name") String email) {
         try {
+            if (redisService.isBlocked(email)) {
+                System.out.println("oo many OTP requests. Try again in a minute.");
+                throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS, "Too many OTP requests. Try again in a minute.");
+            }
             profileService.sendOtp(email);
         } catch (Exception e) {
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, e.getMessage());
@@ -113,6 +117,7 @@ public class AuthController {
     @PostMapping("/verify-otp")
     public void verifyEmail(@RequestBody Map<String, Object> request, @CurrentSecurityContext(expression = "authentication?.name") String email) {
         if(request.get("otp").toString() == null) {
+            System.out.println("Missing Details");
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Missing details");
         }
         try {

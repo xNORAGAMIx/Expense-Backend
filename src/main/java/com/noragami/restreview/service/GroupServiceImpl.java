@@ -100,11 +100,16 @@ public class GroupServiceImpl implements GroupService {
 
         List<GroupMemberEntity> members = groupMemberRepository.findByGroup(group);
 
-        return members.stream()
+        List<GroupMemberResponse> responses = members.stream()
                 .map(member -> new GroupMemberResponse(
                         member.getUser().getName(),
                         member.getUser().getEmail()))
-                .toList();
+                .collect(Collectors.toList());
+
+        // Include creator - requester may not be the creator
+        responses.add(new GroupMemberResponse(group.getCreatedBy().getName(), group.getCreatedBy().getEmail()));
+
+        return responses;
     }
 
     @Override
@@ -236,8 +241,8 @@ public class GroupServiceImpl implements GroupService {
             BigDecimal transfer = debtAmount.min(creditAmount).setScale(2, RoundingMode.HALF_UP);
 
             results.add(new OweRecordDTO(
-                    debtor.getEmail(),
-                    creditor.getEmail(),
+                    debtor.getName(),
+                    creditor.getName(),
                     transfer
             ));
 
@@ -258,7 +263,6 @@ public class GroupServiceImpl implements GroupService {
 
         return results;
     }
-
 
     @Override
     public void settleUp(Long groupId, String fromEmail, String toEmail, BigDecimal amount) {

@@ -3,6 +3,7 @@ package com.noragami.restreview.service;
 import com.noragami.restreview.entity.UserEntity;
 import com.noragami.restreview.events.ResetPasswordEvent;
 import com.noragami.restreview.events.UserRegisteredEvent;
+import com.noragami.restreview.events.VerifyEmailEvent;
 import com.noragami.restreview.io.ProfileRequest;
 import com.noragami.restreview.io.ProfileResponse;
 import com.noragami.restreview.kafka.KafkaEventProducer;
@@ -25,6 +26,7 @@ public class ProfileServiceImpl implements ProfileService {
     private final PasswordEncoder passwordEncoder;
     private final EmailService emailService;
     private final KafkaEventProducer kafkaEventProducer;
+    private final RedisService redisService;
 
 
     // Register User
@@ -62,6 +64,9 @@ public class ProfileServiceImpl implements ProfileService {
         // Expiry time
         long expiry = System.currentTimeMillis() + (10 * 60 * 1000);
 
+        // setting the otp in redis
+         redisService.saveOtp(email, otp, expiry);
+
         // update the user entity
         user.setResetOTP(otp);
         user.setResetOtpExpireAt(expiry);
@@ -70,7 +75,7 @@ public class ProfileServiceImpl implements ProfileService {
         userRepository.save(user);
 
         try {
-              //emailService.sendResetEmail(user.getEmail(), otp);
+              // emailService.sendResetEmail(user.getEmail(), otp);
             kafkaEventProducer.sendResetPasswordEvent(
                     new ResetPasswordEvent(user.getEmail(),user.getResetOTP())
             );
@@ -85,13 +90,25 @@ public class ProfileServiceImpl implements ProfileService {
         UserEntity user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new UsernameNotFoundException("User not found: "+email));
 
-        if(user.getResetOTP() == null || !user.getResetOTP().equals(otp)) {
+        String redisOtpPassword = redisService.getOtp(email);
+
+//        if(user.getResetOTP() == null || !user.getResetOTP().equals(otp)) {
+//            throw new RuntimeException("Invalid OTP");
+//        }
+//
+//        if(user.getResetOtpExpireAt() < System.currentTimeMillis()) {
+//            throw new RuntimeException("OTP Expired");
+//        }
+
+        if (redisOtpPassword == null) {
+            throw new RuntimeException("OTP expired or not found. Please request a new one.");
+        }
+
+        if (!redisOtpPassword.equals(otp)) {
             throw new RuntimeException("Invalid OTP");
         }
 
-        if(user.getResetOtpExpireAt() < System.currentTimeMillis()) {
-            throw new RuntimeException("OTP Expired");
-        }
+        redisService.deleteOtp(email);
 
         user.setPassword(passwordEncoder.encode(password));
         user.setResetOTP(null);
@@ -123,7 +140,10 @@ public class ProfileServiceImpl implements ProfileService {
         userRepository.save(user);
 
         try {
-            emailService.sendVerifyEmail(user.getEmail(), otp);
+            // emailService.sendVerifyEmail(user.getEmail(), otp);
+            kafkaEventProducer.sendVerifyEmailEvent(
+                    new VerifyEmailEvent(user.getEmail(), user.getVerifyOTP())
+            );
         } catch (Exception ex) {
             throw new RuntimeException("Unable to send mail");
         }
